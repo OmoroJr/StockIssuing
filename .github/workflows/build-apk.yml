@@ -1,0 +1,37 @@
+name: Build APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: android-actions/setup-android@v3
+      - run: npm install
+      - name: Build (all features)
+        id: full
+        continue-on-error: true
+        run: bash tools/build-apk.sh full
+      - name: Fallback build (no background sync)
+        id: nobg
+        if: steps.full.outcome == 'failure'
+        continue-on-error: true
+        run: bash tools/build-apk.sh nobg
+      - name: Fallback build (basic)
+        if: steps.full.outcome == 'failure' && steps.nobg.outcome == 'failure'
+        run: bash tools/build-apk.sh plain
+      - name: Summary
+        run: |
+          if [ "${{ steps.full.outcome }}" = "success" ]; then echo "APK built with ALL features (mail app + reminder + background sync)" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.nobg.outcome }}" = "success" ]; then echo "APK built with mail app + reminder, WITHOUT background sync" >> $GITHUB_STEP_SUMMARY
+          else echo "APK built BASIC: mail opens through the share sheet, no reminder, no background sync" >> $GITHUB_STEP_SUMMARY; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: StockIssuing-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk

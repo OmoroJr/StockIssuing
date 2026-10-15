@@ -1,0 +1,18 @@
+{
+  "name": "stock-issuing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Offline stock issuing app (Capacitor Android)",
+  "scripts": {
+    "android:add": "cap add android",
+    "sync": "cap sync android",
+    "build:debug": "cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
+    "@capacitor/filesystem": "^6.0.1",
+    "@capacitor/share": "^6.0.2"
+  }
+}

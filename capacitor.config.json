@@ -1,0 +1,7 @@
+{
+  "appId": "com.stockissuing.app",
+  "appName": "Stock Issuing",
+  "webDir": "www",
+  "backgroundColor": "#0a1f44",
+  "android": { "allowMixedContent": false }
+}
