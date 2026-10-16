@@ -3,14 +3,14 @@
  *
  * What it does
  *  - The app syncs each day's Excel report to this script whenever the phone is online.
- *  - Every 5 minutes the script checks the clock; from 17:30 it emails each site's report
+ *  - Every 5 minutes the script checks the clock; from 17:00 it emails each site's report
  *    for that day through YOUR Gmail, even if the phone is switched off.
- *  - If a phone only gets internet later (after 17:30, or the next day), the report is
+ *  - If a phone only gets internet later (after 17:00, or the next day), the report is
  *    emailed as soon as it syncs.
  *
  * SETUP (about 5 minutes)
  *  1. script.google.com > New project > paste this whole file.
- *  2. Change SECRET (any word) and RECIPIENT (the email that should receive the reports).
+ *  2. SECRET and RECIPIENT (weldcontabs@gmail.com) are already filled in - change them only if you want to.
  *  3. Project Settings (gear icon) > Time zone > (GMT+03:00) Africa/Nairobi.   <-- important
  *  4. Choose function  installTrigger  in the toolbar > Run. Approve the permissions
  *     (Gmail send, Drive, external requests). It sets up the 5-minute clock check.
@@ -19,10 +19,10 @@
  *  6. In the app: Settings > paste the URL into "Gmail link", type the same SECRET > Save > Sync now.
  *  If you edit this script later: Deploy > Manage deployments > edit > New version > Deploy.
  */
-var SECRET = 'change-me';
-var RECIPIENT = 'your.name@gmail.com';
+var SECRET = 'wc-ITjvb3xgZBea';
+var RECIPIENT = 'weldcontabs@gmail.com';
 var SEND_HOUR = 17;
-var SEND_MIN = 30;
+var SEND_MIN = 0;
 var XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 function doPost(e) {

@@ -66,10 +66,10 @@ const today=()=>iso(new Date());
 const nice=s=>{const [y,m,d]=s.split('-');return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]+' '+y};
 const num=n=>(Math.round(n*1000)/1000).toLocaleString('en-US');
 const KEY='stockissuing.v1';
-const DEF={sites:[],active:'',dirty:[],settings:{projects:['General'],method:'mail',sentMail:{},email:'',webhook:'',secret:'',sendTime:'17:30',lastSent:''},items:[],issues:[],draft:{date:'',project:''}};
+const DEF={sites:[],active:'',dirty:[],settings:{projects:['General'],method:'script',sentMail:{},email:'weldcontabs@gmail.com',webhook:'',secret:'',sendTime:'17:00',lastSent:''},items:[],issues:[],draft:{date:'',project:''}};
 let S={};try{S=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){}
 S=Object.assign({},DEF,S);S.settings=Object.assign({},DEF.settings,S.settings);S.draft=Object.assign({},DEF.draft,S.draft);
-if(S.settings.sendTime==='17:00')S.settings.sendTime='17:30';
+if(S.settings.sendTime==='17:30')S.settings.sendTime='17:00';
 if(!Array.isArray(S.sites))S.sites=[];
 if(!Array.isArray(S.dirty))S.dirty=[];
 if(!S.settings.sentMail)S.settings.sentMail={};
@@ -88,7 +88,10 @@ function find(q,limit){const w=q.toLowerCase().split(/\s+/).filter(Boolean),out=
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('show'),2300)}
 function modal(html,btns){const m=$('#modal');m.innerHTML='<div class="box">'+html+btns.map((b,i)=>'<button class="'+b.c+'" data-b="'+i+'">'+b.t+'</button>').join('')+'</div>';m.hidden=false;
   m.onclick=e=>{const b=e.target.closest('[data-b]');if(b){m.hidden=true;const f=btns[+b.dataset.b].f;f&&f()}else if(e.target===m)m.hidden=true}}
-if(!S.draft.date)S.draft.date=today();
+if(S.draft.setOn!==today()){S.draft.date=today();S.draft.setOn=today()}
+let lastDay=today();
+function newDay(){const t=today();if(S.draft.setOn!==t){S.draft.date=t;S.draft.setOn=t;const el=$('#d_date');if(el)el.value=t}
+  if(t!==lastDay){if(lf===lastDay&&lt===lastDay){lf=t;lt=t;if(tab==='log')vLog()}lastDay=t}}
 
 /* ---------- state ---------- */
 let tab='issue',sel=null,lf=today(),lt=today();
@@ -111,7 +114,7 @@ function vIssue(){const d=S.draft,v=$('#view');
   '<div class="row"><div><label>Quantity</label><input id="qty" type="number" inputmode="decimal" min="0" step="any"></div>'+
   '<div><label>Remarks</label><input id="rem" autocomplete="off"></div></div>'+
   '<button class="pri" id="save">SAVE ISSUE</button>';
-  $('#d_date').oninput=e=>{d.date=e.target.value;save()};$('#d_proj').oninput=e=>{d.project=e.target.value;save()};
+  $('#d_date').oninput=e=>{d.date=e.target.value;d.setOn=today();save()};$('#d_proj').oninput=e=>{d.project=e.target.value;save()};
   $('#q').oninput=showRes;$('#save').onclick=saveIssue;showPick();
   if(!S.items.length)$('#res').innerHTML='<div class="card sm">No stock loaded yet. Open the Stock tab and upload your item list.</div>'}
 function showRes(){const q=$('#q').value.trim(),r=$('#res');if(!q){r.innerHTML='';return}
@@ -171,10 +174,11 @@ function parseSheet(buf){const wb=XLSX.read(buf,{type:'array'}),ws=wb.Sheets[wb.
 function vSet(){const s=S.settings,v=$('#view');
   v.innerHTML='<label>Active site (each site has its own stock and issue log)</label><select id="s_act">'+S.sites.map(x=>'<option'+(x.name===S.active?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>'+
   '<div class="row"><input id="s_ns" placeholder="new site name"><button class="sec" id="s_addsite" style="margin-top:0">Add site</button></div>'+
-  '<h3>Daily report (17:30)</h3><label>How to send</label><select id="s_meth"><option value="mail"'+(s.method==='mail'?' selected':'')+'>Phone\'s default mail app (opens ready - you tap Send)</option><option value="script"'+(s.method==='script'?' selected':'')+'>Gmail script (fully automatic, no tap)</option></select>'+
+  '<h3>Daily report (17:00)</h3><label>How to send</label><select id="s_meth"><option value="mail"'+(s.method==='mail'?' selected':'')+'>Phone\'s default mail app (opens ready - you tap Send)</option><option value="script"'+(s.method==='script'?' selected':'')+'>Gmail script (fully automatic, no tap)</option></select>'+
   '<label>Send report to (email address)</label><input id="s_mail" type="email" value="'+esc(s.email)+'" autocomplete="off">'+
-  '<p class="sm">Android does not let an app send mail silently from the phone\'s own account. In mail-app mode the report opens in your default mail app at 17:30 with the Excel attached - tap Send, and the mail app delivers it as soon as there is internet.</p>'+
-  '<h3>Gmail script (only for fully automatic mode)</h3><p class="sm">Each day\'s report is synced to your Gmail script and emailed at 17:30, even if this phone is off. Setup steps are in the README (tools/email-script.gs).</p>'+
+  '<label>Send time (daily)</label><input id="s_time" type="time" value="'+esc(s.sendTime)+'">'+
+  '<p class="sm">Android does not let an app send mail silently from the phone\'s own account. In mail-app mode the report opens in your default mail app at 17:00 with the Excel attached - tap Send, and the mail app delivers it as soon as there is internet.</p>'+
+  '<h3>Gmail script (only for fully automatic mode)</h3><p class="sm">Each day\'s report is synced to your Gmail script and emailed at 17:00, even if this phone is off. Setup steps are in the README (tools/email-script.gs).</p>'+
   '<label>Gmail link (Apps Script web app URL)</label><input id="s_web" value="'+esc(s.webhook)+'" placeholder="https://script.google.com/macros/s/.../exec">'+
   '<label>Secret word (same as in the script)</label><input id="s_sec" value="'+esc(s.secret)+'">'+
   '<div class="card sm" id="s_stat"></div>'+
@@ -184,7 +188,7 @@ function vSet(){const s=S.settings,v=$('#view');
   $('#s_act').onchange=e=>{setActive(e.target.value);save();render();toast('Switched to '+S.active)};
   $('#s_addsite').onclick=()=>{if(addSite($('#s_ns').value)){tab='stock';render();toast('Site added - now upload its stock')}};
   const stat=()=>{$('#s_stat').innerHTML='<b>'+S.dirty.length+'</b> day(s) waiting to sync &middot; last sync: '+(s.lastSync?new Date(s.lastSync).toLocaleString():'never')};stat();
-  $('#s_save').onclick=()=>{s.method=$('#s_meth').value;s.email=$('#s_mail').value.trim();s.webhook=$('#s_web').value.trim();s.secret=$('#s_sec').value.trim();save();header();toast('Settings saved');scheduleReminder();flush().then(stat);checkBanner()};
+  $('#s_save').onclick=()=>{s.method=$('#s_meth').value;s.sendTime=$('#s_time').value||'17:00';s.email=$('#s_mail').value.trim();s.webhook=$('#s_web').value.trim();s.secret=$('#s_sec').value.trim();save();header();toast('Settings saved');scheduleReminder();flush().then(stat);checkBanner()};
   $('#s_sync').onclick=async()=>{$('#s_save').click();if(!s.webhook){toast('Add the Gmail link first');return}await flush();stat();toast(S.dirty.length?'Not synced yet - check internet / link / secret':'Synced')};
   $('#s_now').onclick=async()=>{$('#s_save').click();await sendNow();stat()};
   $('#s_bk').onclick=()=>{const j=JSON.stringify(Object.assign({},S,{items:undefined}));deliver('StockIssuing_backup_'+today()+'.json',btoa(unescape(encodeURIComponent(j))),'application/json')};
@@ -206,12 +210,12 @@ function b64Of(f,t,site){return XLSX.write(makeBook(rowsFor(f,t,site)),{bookType
 const XL='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 async function deliver(name,b64,mime){const C=window.Capacitor;
   if(C&&C.isNativePlatform&&C.isNativePlatform()&&C.Plugins&&C.Plugins.Filesystem&&C.Plugins.Share){
-    try{await C.Plugins.Filesystem.writeFile({path:name,data:b64,directory:'CACHE'});const u=await C.Plugins.Filesystem.getUri({path:name,directory:'CACHE'});
+    try{await C.Plugins.Filesystem.writeFile({path:name,data:b64,directory:'CACHE'});const u=await C.Plugins.Filesystem.getUri({path:name,directory:'CACHE'});try{const st=await C.Plugins.Filesystem.stat({path:name,directory:'CACHE'});if(!(st.size>500)){toast('Export file looks empty ('+st.size+' bytes) - please report this');return}}catch(e2){}
       await C.Plugins.Share.share({title:name,url:u.uri,dialogTitle:'Send or save'});return}catch(e){if(e&&/cancel/i.test(String(e.message||e)))return;toast('Share failed: '+(e.message||e));return}}
   const bin=atob(b64),arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([arr],{type:mime}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
-function exportRange(f,t){const r=rowsFor(f,t);if(!r.length){toast('Nothing to export for these dates');return}deliver(fname(f,t),b64Of(f,t),XL)}
-/* ---------- sync to Gmail script (it emails the report at 17:30) ---------- */
+function exportRange(f,t){const r=rowsFor(f,t);if(!r.length){toast('Nothing to export for '+(f===t?nice(f):nice(f)+' to '+nice(t))+' - check the dates and the active site');return}toast('Exporting '+r.length+' lines ('+(f===t?nice(f):nice(f)+' to '+nice(t))+')');deliver(fname(f,t),b64Of(f,t),XL)}
+/* ---------- sync to Gmail script (it emails the report at 17:00) ---------- */
 function payloadFor(d){const rows=rowsFor(d.date,d.date,d.site);return rows.length?{action:'report',site:d.site,date:d.date,lines:rows.length,filename:fname(d.date,d.date,d.site),base64:b64Of(d.date,d.date,d.site)}:{action:'clear',site:d.site,date:d.date}}
 function bgSet(){const C=window.Capacitor;if(!(C&&C.isNativePlatform&&C.isNativePlatform()&&C.Plugins&&C.Plugins.BackgroundRunner))return;
   const u=S.settings.webhook,sec=S.settings.secret;
@@ -254,7 +258,7 @@ function checkBanner(){const b=$('#banner');if(!S.active){b.hidden=true;return}
   if(!S.settings.webhook){b.hidden=!S.issues.length;b.textContent='Reports are NOT being emailed yet. Tap to add the Gmail link in Settings.';b.onclick=()=>{tab='set';render()};return}
   if(S.dirty.length&&!navigator.onLine){b.hidden=false;b.textContent=S.dirty.length+' day(s) waiting to sync - will send when online';b.onclick=null;return}
   b.hidden=true}
-async function tick(){await flush();tickMail();checkBanner()}
+async function tick(){newDay();await flush();tickMail();checkBanner()}
 window.addEventListener('online',tick);document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});setInterval(tick,30000);
 
 /* ---------- boot ---------- */
