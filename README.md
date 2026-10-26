@@ -1,7 +1,7 @@
 # Stock Issuing app (Android APK project)
 
-Offline app: issue items by Project Code and date, search 4,000+ items by name or code,
-upload stock from Excel/CSV, export the issue report to Excel, daily report at 17:00 through the phone's mail app (or fully automatic via a Gmail script).
+Offline app: issue items by Project Code and date, search 4,000+ items by the first letters of the name or code,
+upload stock from Excel/CSV (with an Item Group column; items and reports are grouped per item group), export the issue report to Excel, daily report at 17:00 through the phone's mail app (or fully automatic via a Gmail script).
 
 ## Get the APK - easiest way (no Android Studio)
 1. Create a new GitHub repository and upload everything in this folder (keep the `.github` folder).
@@ -21,7 +21,7 @@ cd android && ./gradlew assembleDebug      # APK: android/app/build/outputs/apk/
 
 ## First run on the device
 1. First screen: enter the site name. More sites can be added later in Settings; each site keeps its own stock and issue log.
-2. Stock tab: Upload stock (Excel/CSV with Code, Name, Unit, Qty columns).
+2. Stock tab: Upload stock (Excel/CSV with Code, Name, Unit, Qty and Item Group columns).
 3. Issue tab: date, Project Code (this is the reference - it remembers codes you used before), search item, qty, Save.
 Several sites can share one device (switch in Settings) or each site can have its own device. The Excel report carries Site and Project Code on every line.
 
@@ -33,7 +33,7 @@ So at 17:00 the app opens your default mail app (Gmail, Samsung Email, ...) with
 - If you tap Send while offline, the mail app keeps it in the outbox and delivers it as soon as there is internet.
 - "Email report" in the Log tab opens a draft for the dates you selected.
 
-**2. Gmail script (fully automatic, no tap).** The report is emailed from a Gmail account you own by a small Google Apps Script, at 17:00, even if the phone is off.
+**2. Gmail script (fully automatic, no tap).** The report is emailed from weldcontabs@gmail.com by a small Google Apps Script (Settings > Copy the Gmail script puts it on the phone's clipboard), at 17:00, even if the phone is off.
 1. Whenever the phone is online the app syncs each day's Excel report to the script (offline changes sync later, automatically).
 2. The script checks the clock every 5 minutes and from 17:00 emails each site's report for that day (only sites that issued something).
 3. If a phone only gets internet after 17:00 (or the next day), its report is emailed as soon as it syncs.

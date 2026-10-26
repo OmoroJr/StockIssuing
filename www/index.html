@@ -29,6 +29,7 @@ button.pri{background:var(--acc);color:#04204a}button.sec{background:var(--card2
 .res div{padding:11px 12px;border-bottom:1px solid var(--line)}.res div:last-child{border:0}.res div:active{background:var(--card2)}
 .sm{color:var(--mut);font-size:14px}.pill{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:20px;padding:3px 10px;margin:3px 4px 0 0;font-size:13px}
 .day{margin:18px 0 4px;color:var(--acc);font-weight:700;border-bottom:1px solid var(--line);padding-bottom:4px}
+.gh{margin:14px 0 4px;padding:6px 10px;background:var(--card2);border-left:4px solid var(--acc);border-radius:6px;font-weight:700;color:var(--acc)}
 .neg{color:var(--bad);font-weight:700}.pos{color:var(--ok)}
 h3{margin:18px 0 4px}
 details{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:10px;padding:10px 12px}summary{font-weight:700}
@@ -55,6 +56,7 @@ details{background:var(--card);border:1px solid var(--line);border-radius:12px;m
 <div id="toast"></div>
 <div id="modal" hidden></div>
 <script src="xlsx.mini.min.js"></script>
+<script src="gmail-script.js"></script>
 <script>
 "use strict";
 /* ---------- helpers ---------- */
@@ -65,6 +67,7 @@ const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>iso(new Date());
 const nice=s=>{const [y,m,d]=s.split('-');return d+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m-1]+' '+y};
 const num=n=>(Math.round(n*1000)/1000).toLocaleString('en-US');
+const APP_VERSION='2.1';
 const KEY='stockissuing.v1';
 const DEF={sites:[],active:'',dirty:[],settings:{projects:['General'],method:'script',sentMail:{},email:'weldcontabs@gmail.com',webhook:'',secret:'',sendTime:'17:00',lastSent:''},items:[],issues:[],draft:{date:'',project:''}};
 let S={};try{S=JSON.parse(localStorage.getItem(KEY))||{}}catch(e){}
@@ -83,8 +86,18 @@ function setActive(n){S.active=n;S.items=activeSite().items;reindex();sel=null}
 function addSite(n){n=n.trim();if(!n)return false;if(S.sites.some(x=>x.name.toLowerCase()===n.toLowerCase())){toast('That site already exists');return false}S.sites.push({name:n,items:[]});setActive(n);save();return true}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(Object.assign({},S,{items:undefined})))}catch(e){toast('Phone storage is full')}};
 let IDX=[];const reindex=()=>{IDX=S.items.map(i=>(i.c+' '+i.n).toLowerCase())};reindex();
-function find(q,limit){const w=q.toLowerCase().split(/\s+/).filter(Boolean),out=[];
-  for(let i=0;i<S.items.length&&out.length<limit;i++){let ok=true;for(const x of w){if(IDX[i].indexOf(x)<0){ok=false;break}}if(ok)out.push(i)}return out}
+let anyMode=false,grpF='';
+const GN=i=>i.g||'Ungrouped';
+function groupList(){const m={};S.items.forEach(i=>{m[GN(i)]=1});return Object.keys(m).sort((a,b)=>a.localeCompare(b))}
+function find(q,limit){const t=q.trim().toLowerCase();if(!t&&!grpF)return[];const out=[],w=t.split(/\s+/).filter(Boolean);
+  for(let i=0;i<S.items.length;i++){const it=S.items[i];if(grpF&&GN(it)!==grpF)continue;let hit;
+    if(!t)hit=true;else if(anyMode){hit=true;for(const x of w){if(IDX[i].indexOf(x)<0){hit=false;break}}}
+    else hit=it.n.toLowerCase().indexOf(t)===0||it.c.toLowerCase().indexOf(t)===0;
+    if(hit)out.push(i)}
+  out.sort((a,b)=>GN(S.items[a]).localeCompare(GN(S.items[b]))||S.items[a].n.localeCompare(S.items[b].n));return out.slice(0,limit)}
+function groupedList(idx,rowFn){let h='',cur=null;idx.forEach(i=>{const g=GN(S.items[i]);if(g!==cur){cur=g;h+='<div class="gh">'+esc(g)+'</div>'}h+=rowFn(i)});return h}
+function groupSelect(id){return '<select id="'+id+'"><option value="">All item groups</option>'+groupList().map(g=>'<option'+(g===grpF?' selected':'')+'>'+esc(g)+'</option>').join('')+'</select>'}
+function noMatch(q){if(!q)return '<div class="card sm">No items here.</div>';return '<div class="card sm">No item starts with &ldquo;'+esc(q)+'&rdquo;.'+(anyMode?'':'<button class="sec" data-any="1" style="margin-top:8px">Search anywhere in the name</button>')+'</div>'}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toast.h);toast.h=setTimeout(()=>t.classList.remove('show'),2300)}
 function modal(html,btns){const m=$('#modal');m.innerHTML='<div class="box">'+html+btns.map((b,i)=>'<button class="'+b.c+'" data-b="'+i+'">'+b.t+'</button>').join('')+'</div>';m.hidden=false;
   m.onclick=e=>{const b=e.target.closest('[data-b]');if(b){m.hidden=true;const f=btns[+b.dataset.b].f;f&&f()}else if(e.target===m)m.hidden=true}}
@@ -109,17 +122,18 @@ function vIssue(){const d=S.draft,v=$('#view');
   v.innerHTML=
   '<div class="row"><div><label>Date</label><input type="date" id="d_date" value="'+esc(d.date)+'"></div>'+
   '<div><label>Project Code (ref)</label><input id="d_proj" list="pcodes" value="'+esc(d.project)+'" autocomplete="off" autocapitalize="characters"><datalist id="pcodes">'+[...new Set(S.issues.map(x=>x.project))].sort().map(p=>'<option value="'+esc(p)+'">').join('')+'</datalist></div></div>'+
-  '<label>Item (search by name or product code)</label><input type="search" id="q" placeholder="e.g. bolt 12  or  B001" autocomplete="off">'+
+  '<label>Item group</label>'+groupSelect('grp')+'<label>Item (type the first letters of the name or code)</label><input type="search" id="q" placeholder="e.g. bol  or  B001" autocomplete="off">'+
   '<div id="res"></div><div id="pick"></div>'+
   '<div class="row"><div><label>Quantity</label><input id="qty" type="number" inputmode="decimal" min="0" step="any"></div>'+
   '<div><label>Remarks</label><input id="rem" autocomplete="off"></div></div>'+
   '<button class="pri" id="save">SAVE ISSUE</button>';
   $('#d_date').oninput=e=>{d.date=e.target.value;d.setOn=today();save()};$('#d_proj').oninput=e=>{d.project=e.target.value;save()};
-  $('#q').oninput=showRes;$('#save').onclick=saveIssue;showPick();
+  $('#grp').onchange=e=>{grpF=e.target.value;showRes()};$('#q').oninput=showRes;$('#save').onclick=saveIssue;showPick();
   if(!S.items.length)$('#res').innerHTML='<div class="card sm">No stock loaded yet. Open the Stock tab and upload your item list.</div>'}
-function showRes(){const q=$('#q').value.trim(),r=$('#res');if(!q){r.innerHTML='';return}
-  const m=find(q,40);r.innerHTML=m.length?'<div class="res">'+m.map(i=>'<div data-i="'+i+'"><b>'+esc(S.items[i].n)+'</b><br><span class="sm">'+esc(S.items[i].c)+' &middot; stock '+num(S.items[i].q)+' '+esc(S.items[i].u)+'</span></div>').join('')+'</div>':'<div class="card sm">No match</div>';
-  r.querySelectorAll('[data-i]').forEach(e=>e.onclick=()=>{sel=+e.dataset.i;$('#q').value='';r.innerHTML='';showPick();$('#qty').focus()})}
+function showRes(){const q=$('#q').value.trim(),r=$('#res');if(!q&&!grpF){anyMode=false;r.innerHTML='';return}
+  const m=find(q,80);r.innerHTML=m.length?'<div class="res">'+groupedList(m,i=>'<div data-i="'+i+'"><b>'+esc(S.items[i].n)+'</b><br><span class="sm">'+esc(S.items[i].c)+' &middot; stock '+num(S.items[i].q)+' '+esc(S.items[i].u)+'</span></div>')+'</div>':noMatch(q);
+  r.querySelectorAll('[data-any]').forEach(b=>b.onclick=()=>{anyMode=true;showRes()});
+  r.querySelectorAll('[data-i]').forEach(e=>e.onclick=()=>{sel=+e.dataset.i;anyMode=false;$('#q').value='';r.innerHTML='';showPick();$('#qty').focus()})}
 function showPick(){const p=$('#pick');if(sel==null||!S.items[sel]){p.innerHTML='';return}const i=S.items[sel];
   p.innerHTML='<div class="card"><button class="x" id="clr">&times;</button><b>'+esc(i.n)+'</b><br><span class="sm">'+esc(i.c)+' &middot; in stock: <b class="'+(i.q<=0?'neg':'pos')+'">'+num(i.q)+'</b> '+esc(i.u)+'</span></div>';
   $('#clr').onclick=()=>{sel=null;showPick()}}
@@ -130,20 +144,20 @@ function saveIssue(){const d=S.draft,qty=parseFloat($('#qty').value);
   if(!(qty>0)){toast('Enter a quantity above 0');return}
   const it=S.items[sel];
   const go=()=>{it.q=Math.round((it.q-qty)*1000)/1000;
-    S.issues.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),date:d.date,site:S.active,project:d.project.trim(),code:it.c,name:it.n,unit:it.u,qty:qty,remarks:$('#rem').value.trim(),ts:Date.now()});
+    S.issues.push({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),date:d.date,site:S.active,project:d.project.trim(),grp:it.g||'',code:it.c,name:it.n,unit:it.u,qty:qty,remarks:$('#rem').value.trim(),ts:Date.now()});
     markDirty(S.active,d.date);sel=null;toast('Saved: '+num(qty)+' '+it.u+' '+it.n);vIssue();$('#q').focus()};
   if(qty>it.q)modal('<p>Only <b>'+num(it.q)+' '+esc(it.u)+'</b> in stock. Issue '+num(qty)+' anyway?</p>',[{t:'Issue anyway',c:'pri',f:go},{t:'Cancel',c:'sec'}]);else go()}
 
 function rowsFor(f,t,site){site=site||S.active;return S.issues.filter(x=>x.site===site&&x.date>=f&&x.date<=t).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.ts-b.ts)}
 function vLog(){const v=$('#view');
   v.innerHTML='<div class="row"><div><label>From</label><input type="date" id="lf" value="'+lf+'"></div><div><label>To</label><input type="date" id="lt" value="'+lt+'"></div></div><div id="lsum"></div>'+
-  '<div class="row"><button class="pri" id="exp">Export Excel</button><button class="sec" id="mail">Email report</button></div><div id="llist"></div>';
+  '<div class="row"><button class="pri" id="exp">Export Excel</button><button class="sec" id="mail">Email report</button></div><div class="row"><button class="sec" id="prev">Preview</button><button class="sec" id="csv">Export CSV</button></div><div id="llist"></div>';
   $('#lf').onchange=e=>{lf=e.target.value;if(lt<lf){lt=lf;$('#lt').value=lt}fillLog()};$('#lt').onchange=e=>{lt=e.target.value;fillLog()};
-  $('#exp').onclick=()=>exportRange(lf,lt);$('#mail').onclick=()=>S.settings.method==='mail'?openComposer(S.active,lf,lt):sendNow();fillLog()}
+  $('#exp').onclick=()=>exportRange(lf,lt);$('#prev').onclick=()=>previewRange(lf,lt);$('#csv').onclick=()=>exportCsv(lf,lt);$('#mail').onclick=()=>S.settings.method==='mail'?openComposer(S.active,lf,lt):sendNow();fillLog()}
 function fillLog(){const r=rowsFor(lf,lt).reverse(),tot=r.reduce((a,x)=>a+x.qty,0);
   $('#lsum').innerHTML='<div class="card"><b>'+r.length+'</b> lines &middot; <b>'+new Set(r.map(x=>x.code+'|'+x.name)).size+'</b> items &middot; total qty <b>'+num(tot)+'</b></div>';
   let h='',cur='';r.forEach(x=>{if(x.date!==cur){cur=x.date;h+='<div class="day">'+nice(cur)+'</div>'}
-    h+='<div class="card"><button class="x" data-del="'+x.id+'">&times;</button><b>'+esc(x.name)+'</b> &mdash; '+num(x.qty)+' '+esc(x.unit)+'<br><span class="sm">Ref <b>'+esc(x.project)+'</b>'+(x.remarks?' &middot; '+esc(x.remarks):'')+'</span></div>'});
+    h+='<div class="card"><button class="x" data-del="'+x.id+'">&times;</button><b>'+esc(x.name)+'</b> &mdash; '+num(x.qty)+' '+esc(x.unit)+'<br><span class="sm">'+esc(x.grp||'Ungrouped')+' &middot; Ref <b>'+esc(x.project)+'</b>'+(x.remarks?' &middot; '+esc(x.remarks):'')+'</span></div>'});
   $('#llist').innerHTML=h||'<div class="card sm">No issues in this period.</div>';
   $('#llist').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>delIssue(b.dataset.del))}
 function delIssue(id){const x=S.issues.find(i=>i.id===id);if(!x)return;
@@ -151,25 +165,27 @@ function delIssue(id){const x=S.issues.find(i=>i.id===id);if(!x)return;
     const it=S.items.find(i=>(x.code&&i.c===x.code)||(!x.code&&i.n===x.name));if(it)it.q=Math.round((it.q+x.qty)*1000)/1000;
     S.issues=S.issues.filter(i=>i.id!==id);markDirty(x.site,x.date);fillLog();toast('Deleted')}},{t:'Keep',c:'sec'}])}
 
-function vStock(){$('#view').innerHTML='<div class="card"><b>'+S.items.length+'</b> items in stock</div>'+
+function vStock(){$('#view').innerHTML='<div class="card"><b>'+S.items.length+'</b> items in <b>'+groupList().length+'</b> groups</div>'+
   '<input type="file" id="f" accept=".xlsx,.xls,.csv" hidden><button class="pri" id="up">Upload stock (Excel / CSV)</button>'+
-  '<div class="sm" style="margin-top:8px">Columns it understands: Code, Name (or Item / Description), Unit, Qty (or Stock / Balance). First sheet is used.</div>'+
-  '<label>Search stock</label><input type="search" id="sq" placeholder="name or code" autocomplete="off"><div id="slist"></div>';
-  $('#up').onclick=()=>$('#f').click();$('#f').onchange=importStock;$('#sq').oninput=fillStock;fillStock()}
-function fillStock(){const q=($('#sq').value||'').trim();const m=q?find(q,60):S.items.slice(0,60).map((_,i)=>i);
-  $('#slist').innerHTML=m.map(i=>{const x=S.items[i];return '<div class="card"><b>'+esc(x.n)+'</b><br><span class="sm">'+esc(x.c)+'</span><span style="float:right" class="'+(x.q<=0?'neg':'pos')+'"><b>'+num(x.q)+'</b> '+esc(x.u)+'</span></div>'}).join('')||'<div class="card sm">No match</div>'}
+  '<div class="sm" style="margin-top:8px">Columns it understands: Code, Name (or Item / Description), Unit, Qty (or Stock / Balance), Item Group (or Group / Category). First sheet is used.</div>'+
+  '<label>Item group</label>'+groupSelect('sgrp')+'<label>Search stock (first letters of name or code)</label><input type="search" id="sq" placeholder="name or code" autocomplete="off"><div id="slist"></div>';
+  $('#up').onclick=()=>$('#f').click();$('#f').onchange=importStock;$('#sgrp').onchange=e=>{grpF=e.target.value;fillStock()};$('#sq').oninput=fillStock;fillStock()}
+function fillStock(){const q=($('#sq').value||'').trim();if(!q&&!grpF)anyMode=false;
+  const m=(q||grpF)?find(q,300):S.items.map((_,i)=>i).sort((a,b)=>GN(S.items[a]).localeCompare(GN(S.items[b]))||S.items[a].n.localeCompare(S.items[b].n)).slice(0,80);
+  $('#slist').innerHTML=groupedList(m,i=>{const x=S.items[i];return '<div class="card"><b>'+esc(x.n)+'</b><br><span class="sm">'+esc(x.c)+'</span><span style="float:right" class="'+(x.q<=0?'neg':'pos')+'"><b>'+num(x.q)+'</b> '+esc(x.u)+'</span></div>'})||noMatch(q);
+  $('#slist').querySelectorAll('[data-any]').forEach(b=>b.onclick=()=>{anyMode=true;fillStock()})}
 function importStock(e){const f=e.target.files[0];if(!f)return;const rd=new FileReader();
   rd.onload=()=>{try{const items=parseSheet(rd.result);if(!items.length)throw new Error('No item rows found');
     modal('<p>Found <b>'+items.length+'</b> items in <b>'+esc(f.name)+'</b>.</p><p class="sm">Replace: the list becomes exactly this file. Add / update: matches by code (or name), updates quantity, keeps other items.</p>',
-     [{t:'Replace all stock',c:'pri',f:()=>{setItems(items);done(items.length)}},{t:'Add / update',c:'sec',f:()=>{const m=new Map(S.items.map(i=>[i.c||i.n,i]));items.forEach(n=>{const k=n.c||n.n,o=m.get(k);if(o){o.n=n.n;o.u=n.u||o.u;o.q=n.q}else{S.items.push(n);m.set(k,n)}});done(items.length)}},{t:'Cancel',c:'sec'}])
+     [{t:'Replace all stock',c:'pri',f:()=>{setItems(items);done(items.length)}},{t:'Add / update',c:'sec',f:()=>{const m=new Map(S.items.map(i=>[i.c||i.n,i]));items.forEach(n=>{const k=n.c||n.n,o=m.get(k);if(o){o.n=n.n;o.u=n.u||o.u;o.q=n.q;o.g=n.g||o.g}else{S.items.push(n);m.set(k,n)}});done(items.length)}},{t:'Cancel',c:'sec'}])
   }catch(err){modal('<p>'+esc(err.message)+'</p>',[{t:'OK',c:'sec'}])}e.target.value=''};rd.readAsArrayBuffer(f)}
 function done(n){reindex();save();toast(n+' items loaded');vStock()}
 function parseSheet(buf){const wb=XLSX.read(buf,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
   const nm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,'');
-  const K={c:['code','productcode','itemcode','sku','partno','partnumber','no','id'],n:['name','itemname','item','description','product','productname','itemdescription','itemdesc'],u:['unit','uom','unitofmeasure','units'],q:['qty','quantity','stock','balance','openingstock','onhand','instock','stockqty','qtyonhand']};
+  const K={c:['code','productcode','itemcode','sku','partno','partnumber','no','id'],n:['name','itemname','item','description','product','productname','itemdescription','itemdesc'],u:['unit','uom','unitofmeasure','units'],q:['qty','quantity','stock','balance','openingstock','onhand','instock','stockqty','qtyonhand'],g:['itemgroup','group','category','itemcategory','class','itemclass','groupname','itemtype']};
   let hi=-1,map={};for(let r=0;r<Math.min(rows.length,10);r++){const m={};rows[r].forEach((h,ci)=>{const k=nm(h);for(const f in K)if(m[f]===undefined&&K[f].indexOf(k)>=0)m[f]=ci});if(m.n!==undefined){hi=r;map=m;break}}
   if(hi<0)throw new Error('Could not find an item name column. Put headers like Code, Name, Unit, Qty in the first rows.');
-  return rows.slice(hi+1).map(r=>({c:map.c!==undefined?String(r[map.c]).trim():'',n:String(r[map.n]).trim(),u:map.u!==undefined?String(r[map.u]).trim():'',q:map.q!==undefined?(parseFloat(String(r[map.q]).replace(/,/g,''))||0):0})).filter(i=>i.n)}
+  return rows.slice(hi+1).map(r=>({c:map.c!==undefined?String(r[map.c]).trim():'',n:String(r[map.n]).trim(),u:map.u!==undefined?String(r[map.u]).trim():'',q:map.q!==undefined?(parseFloat(String(r[map.q]).replace(/,/g,''))||0):0,g:map.g!==undefined?String(r[map.g]).trim():''})).filter(i=>i.n)}
 
 function vSet(){const s=S.settings,v=$('#view');
   v.innerHTML='<label>Active site (each site has its own stock and issue log)</label><select id="s_act">'+S.sites.map(x=>'<option'+(x.name===S.active?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>'+
@@ -183,12 +199,14 @@ function vSet(){const s=S.settings,v=$('#view');
   '<label>Secret word (same as in the script)</label><input id="s_sec" value="'+esc(s.secret)+'">'+
   '<div class="card sm" id="s_stat"></div>'+
   '<button class="pri" id="s_save">Save settings</button><div class="row"><button class="sec" id="s_sync">Sync now</button><button class="sec" id="s_now">Send today\'s report now</button></div>'+
+  '<button class="sec" id="s_copy">Copy the Gmail script</button><p class="sm">Reports are sent from weldcontabs@gmail.com by the script. Tap Copy, then paste it into a new project at script.google.com while signed in as weldcontabs@gmail.com (steps are at the top of the script).</p>'+
   '<h3>Backup</h3><input type="file" id="s_rf" accept=".json" hidden><div class="row"><button class="sec" id="s_bk">Backup data</button><button class="sec" id="s_rs">Restore</button></div>'+
-  '<p class="sm">Reports include only what is on this phone. Back up regularly.</p>';
+  '<p class="sm">Reports include only what is on this phone. Back up regularly.</p><p class="sm">App version '+APP_VERSION+'</p>';
   $('#s_act').onchange=e=>{setActive(e.target.value);save();render();toast('Switched to '+S.active)};
   $('#s_addsite').onclick=()=>{if(addSite($('#s_ns').value)){tab='stock';render();toast('Site added - now upload its stock')}};
   const stat=()=>{$('#s_stat').innerHTML='<b>'+S.dirty.length+'</b> day(s) waiting to sync &middot; last sync: '+(s.lastSync?new Date(s.lastSync).toLocaleString():'never')};stat();
   $('#s_save').onclick=()=>{s.method=$('#s_meth').value;s.sendTime=$('#s_time').value||'17:00';s.email=$('#s_mail').value.trim();s.webhook=$('#s_web').value.trim();s.secret=$('#s_sec').value.trim();save();header();toast('Settings saved');scheduleReminder();flush().then(stat);checkBanner()};
+  $('#s_copy').onclick=async()=>{const t=window.GMAIL_SCRIPT||'';try{await navigator.clipboard.writeText(t);toast('Script copied - paste it into script.google.com')}catch(e){modal('<p>Select all and copy this script:</p><textarea id="gs" rows="10" readonly>'+esc(t)+'</textarea>',[{t:'Close',c:'sec'}]);setTimeout(()=>{const a=$('#gs');if(a){a.focus();a.select()}},50)}};
   $('#s_sync').onclick=async()=>{$('#s_save').click();if(!s.webhook){toast('Add the Gmail link first');return}await flush();stat();toast(S.dirty.length?'Not synced yet - check internet / link / secret':'Synced')};
   $('#s_now').onclick=async()=>{$('#s_save').click();await sendNow();stat()};
   $('#s_bk').onclick=()=>{const j=JSON.stringify(Object.assign({},S,{items:undefined}));deliver('StockIssuing_backup_'+today()+'.json',btoa(unescape(encodeURIComponent(j))),'application/json')};
@@ -198,12 +216,14 @@ function vSet(){const s=S.settings,v=$('#view');
 
 /* ---------- reports ---------- */
 function serial(s){const [y,m,d]=s.split('-').map(Number);return Date.UTC(y,m-1,d)/86400000+25569}
-function makeBook(rows){const wb=XLSX.utils.book_new();
-  const a=[['Date','Site','Project Code','Item Issued','Quantity','Unit','Item Code','Remarks']].concat(rows.map(x=>[serial(x.date),x.site,x.project,x.name,x.qty,x.unit,x.code,x.remarks]));
+function sortG(r){return r.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(a.grp||'Ungrouped').localeCompare(b.grp||'Ungrouped')||a.name.localeCompare(b.name)||a.ts-b.ts)}
+function makeBook(rows){const wb=XLSX.utils.book_new();rows=sortG(rows);
+  const a=[['Date','Site','Project Code','Item Group','Item Issued','Quantity','Unit','Item Code','Remarks']].concat(rows.map(x=>[serial(x.date),x.site,x.project,x.grp||'Ungrouped',x.name,x.qty,x.unit,x.code,x.remarks]));
   const w1=XLSX.utils.aoa_to_sheet(a);for(let r=1;r<a.length;r++){const c=w1['A'+(r+1)];c.t='n';c.z='dd-mmm-yyyy'}
-  w1['!cols']=[{wch:13},{wch:18},{wch:16},{wch:40},{wch:10},{wch:8},{wch:14},{wch:28}];XLSX.utils.book_append_sheet(wb,w1,'Issues');
-  const I={};rows.forEach(x=>{const k=x.site+'|'+x.project+'|'+x.code+'|'+x.name,g=I[k]=I[k]||[x.site,x.project,x.code,x.name,x.unit,0];g[5]+=x.qty});
-  const w2=XLSX.utils.aoa_to_sheet([['Site','Project Code','Item Code','Item','Unit','Total Qty']].concat(Object.values(I)));w2['!cols']=[{wch:18},{wch:16},{wch:14},{wch:40},{wch:8},{wch:12}];XLSX.utils.book_append_sheet(wb,w2,'By Item');
+  w1['!cols']=[{wch:13},{wch:18},{wch:16},{wch:20},{wch:40},{wch:10},{wch:8},{wch:14},{wch:28}];XLSX.utils.book_append_sheet(wb,w1,'Issues');
+  const I={};rows.forEach(x=>{const g=x.grp||'Ungrouped',k=x.site+'|'+x.project+'|'+g+'|'+x.code+'|'+x.name,e=I[k]=I[k]||[x.site,x.project,g,x.code,x.name,x.unit,0];e[6]+=x.qty});
+  const lst=Object.values(I).sort((a,b)=>a[2].localeCompare(b[2])||a[4].localeCompare(b[4]));
+  const w2=XLSX.utils.aoa_to_sheet([['Site','Project Code','Item Group','Item Code','Item','Unit','Total Qty']].concat(lst));w2['!cols']=[{wch:18},{wch:16},{wch:20},{wch:14},{wch:40},{wch:8},{wch:12}];XLSX.utils.book_append_sheet(wb,w2,'By Item Group');
   return wb}
 function fname(f,t,site){return (site||S.active||'Site').replace(/[^\w\-]+/g,'_')+'_Issues_'+(f===t?f:f+'_to_'+t)+'.xlsx'}
 function b64Of(f,t,site){return XLSX.write(makeBook(rowsFor(f,t,site)),{bookType:'xlsx',type:'base64'})}
@@ -214,9 +234,20 @@ async function deliver(name,b64,mime){const C=window.Capacitor;
       await C.Plugins.Share.share({title:name,url:u.uri,dialogTitle:'Send or save'});return}catch(e){if(e&&/cancel/i.test(String(e.message||e)))return;toast('Share failed: '+(e.message||e));return}}
   const bin=atob(b64),arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([arr],{type:mime}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
-function exportRange(f,t){const r=rowsFor(f,t);if(!r.length){toast('Nothing to export for '+(f===t?nice(f):nice(f)+' to '+nice(t))+' - check the dates and the active site');return}toast('Exporting '+r.length+' lines ('+(f===t?nice(f):nice(f)+' to '+nice(t))+')');deliver(fname(f,t),b64Of(f,t),XL)}
+function checkBook(b64,n){try{const wb=XLSX.read(b64,{type:'base64'}),ws=wb.Sheets['Issues'];return !!ws&&XLSX.utils.sheet_to_json(ws).length===n}catch(e){return false}}
+function exportRange(f,t){const r=rowsFor(f,t),lab=f===t?nice(f):nice(f)+' to '+nice(t);
+  if(!r.length){toast('Nothing to export for '+lab+' - check the dates and the active site');return}
+  const b64=b64Of(f,t);if(!checkBook(b64,r.length)){toast('Excel file check failed - use Export CSV and tell support');return}
+  toast('Exporting '+r.length+' lines ('+lab+')');deliver(fname(f,t),b64,XL)}
+function previewRange(f,t){const r=rowsFor(f,t),lab=f===t?nice(f):nice(f)+' to '+nice(t);
+  modal('<p><b>'+esc(S.active)+'</b> &middot; '+lab+'<br>'+r.length+' lines will be exported</p>'+(r.length?r.slice(0,8).map(x=>'<div class="sm">'+nice(x.date)+' &middot; '+esc(x.project)+' &middot; '+esc(x.name)+' &middot; <b>'+num(x.qty)+'</b></div>').join('')+(r.length>8?'<div class="sm">... and '+(r.length-8)+' more</div>':''):'<div class="sm">Nothing here. Check the From/To dates and the active site (Settings).</div>'),[{t:'OK',c:'pri'}])}
+function csvText(r){const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  return '\ufeff'+[['Date','Site','Project Code','Item Group','Item Issued','Quantity','Unit','Item Code','Remarks']].concat(sortG(r).map(x=>[x.date,x.site,x.project,x.grp||'Ungrouped',x.name,x.qty,x.unit,x.code,x.remarks])).map(a=>a.map(q).join(',')).join('\r\n')}
+function summaryText(r){const o=[];let g=null,n=0;for(const x of sortG(r)){if(n>=40)break;const gg=x.grp||'Ungrouped';if(gg!==g){g=gg;o.push('== '+g+' ==')}o.push(x.date+' | '+x.project+' | '+x.name+' | '+x.qty+' '+x.unit);n++}return o.join('\n')+(r.length>40?'\n... and '+(r.length-40)+' more lines (see attachment)':'')}
+function exportCsv(f,t){const r=rowsFor(f,t);if(!r.length){toast('Nothing to export for these dates');return}
+  deliver(fname(f,t).replace(/\.xlsx$/,'.csv'),btoa(unescape(encodeURIComponent(csvText(r)))),'text/csv');toast('Exporting CSV ('+r.length+' lines)')}
 /* ---------- sync to Gmail script (it emails the report at 17:00) ---------- */
-function payloadFor(d){const rows=rowsFor(d.date,d.date,d.site);return rows.length?{action:'report',site:d.site,date:d.date,lines:rows.length,filename:fname(d.date,d.date,d.site),base64:b64Of(d.date,d.date,d.site)}:{action:'clear',site:d.site,date:d.date}}
+function payloadFor(d){const rows=rowsFor(d.date,d.date,d.site);return rows.length?{action:'report',site:d.site,date:d.date,lines:rows.length,filename:fname(d.date,d.date,d.site),base64:b64Of(d.date,d.date,d.site),csv:csvText(rows),summary:summaryText(rows)}:{action:'clear',site:d.site,date:d.date}}
 function bgSet(){const C=window.Capacitor;if(!(C&&C.isNativePlatform&&C.isNativePlatform()&&C.Plugins&&C.Plugins.BackgroundRunner))return;
   const u=S.settings.webhook,sec=S.settings.secret;
   const list=u?S.dirty.map(d=>({key:d.site+'|'+d.date,url:u,body:JSON.stringify(Object.assign({secret:sec},payloadFor(d)))})):[];
@@ -242,7 +273,7 @@ async function openComposer(site,f,t){const s=S.settings,rows=rowsFor(f,t,site);
   if(!s.email){toast('Enter the report email in Settings first');tab='set';render();return}
   const b64=b64Of(f,t,site),name=fname(f,t,site),C=window.Capacitor,EC=C&&C.Plugins&&C.Plugins.EmailComposer;
   if(f===today()&&t===today()){s.sentMail[site]=today();save()}
-  if(C&&C.isNativePlatform&&C.isNativePlatform()&&EC){try{await EC.open({to:[s.email],subject:site+' - stock issue report '+(f===t?nice(f):nice(f)+' to '+nice(t)),body:'Stock issue report for '+site+' ('+rows.length+' lines) attached.',attachments:[{type:'base64',path:b64,name:name}]})}catch(e){toast('Could not open the mail app: '+(e&&e.message||e))}}
+  if(C&&C.isNativePlatform&&C.isNativePlatform()&&EC){try{await EC.open({to:[s.email],subject:site+' - stock issue report '+(f===t?nice(f):nice(f)+' to '+nice(t)),body:'Stock issue report for '+site+' ('+rows.length+' lines) attached.\n\n'+summaryText(rows),attachments:[{type:'base64',path:b64,name:name}]})}catch(e){toast('Could not open the mail app: '+(e&&e.message||e))}}
   else await deliver(name,b64,XL);
   checkBanner()}
 function tickMail(){const s=S.settings;if(s.method!=='mail'||!s.email||document.hidden||!$('#modal').hidden)return;const d=mailDue();if(d.length)openComposer(d[0],today(),today())}
